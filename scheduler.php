@@ -51,13 +51,13 @@ $tagsData = $config['tags'];
  */
 class CalendarTagScheduler
 {
-    private $tags = [];
+    public $tags = [];
     private $strlenFunc;
-    private $slots = [];
+    public $slots = [];
     public $priorityToPeriod = [];
-    private $schedule = [];
+    public $schedule = [];
     private $lastUsed = [];
-    private $tagFirstDates = [];
+    public $tagFirstDates = [];
     private $tagFirstSlots = [];
     private $allowSameDayRepetition = true;
 
@@ -627,17 +627,370 @@ $startDate = date('Y-m-01');
 $daysInMonth = date('t');
 $scheduler->generateSchedule($startDate, $daysInMonth);
 
-echo "=== РАСПИСАНИЕ КАЛЕНДАРЯ (весь месяц) ===\n\n";
-echo $scheduler->getScheduleTableFormatted();
-
-echo "\n=== СВОДКА ПО ТЕГАМ ===\n\n";
-echo $scheduler->getTagSummaryFormatted();
-
-echo $scheduler->printStatistics();
-
 $icsFile = $scheduler->generateICS('calendar_tags.ics');
-echo "\n\n=== ICS-ФАЙЛ СОЗДАН ===\n";
-echo "Файл: $icsFile\n";
-echo "Формат: События на весь день с правилами повторения (RRULE)\n";
-echo "Каждый тег появляется как отдельное повторяющееся событие.\n";
-echo "Вы можете импортировать его в Google Calendar, Outlook или другой календарь.\n";
+
+// Detect if running in web context
+$isWeb = php_sapi_name() !== 'cli';
+
+if ($isWeb) {
+    // Web output - HTML
+    outputHtml($scheduler, $icsFile, $startDate, $daysInMonth);
+} else {
+    // Console output - Keep original format
+    echo "=== РАСПИСАНИЕ КАЛЕНДАРЯ (весь месяц) ===\n\n";
+    echo $scheduler->getScheduleTableFormatted();
+
+    echo "\n=== СВОДКА ПО ТЕГАМ ===\n\n";
+    echo $scheduler->getTagSummaryFormatted();
+
+    echo $scheduler->printStatistics();
+
+    echo "\n\n=== ICS-ФАЙЛ СОЗДАН ===\n";
+    echo "Файл: $icsFile\n";
+    echo "Формат: События на весь день с правилами повторения (RRULE)\n";
+    echo "Каждый тег появляется как отдельное повторяющееся событие.\n";
+    echo "Вы можете импортировать его в Google Calendar, Outlook или другой календарь.\n";
+}
+
+/**
+ * Output HTML version for web browser
+ *
+ * @param CalendarTagScheduler $scheduler Scheduler instance
+ * @param string $icsFile ICS filename
+ * @param string $startDate Start date
+ * @param int $daysInMonth Number of days
+ */
+function outputHtml($scheduler, $icsFile, $startDate, $daysInMonth)
+{
+    $stats = $scheduler->getStatistics();
+    $currentMonth = date('F Y', strtotime($startDate));
+    ?>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendar Tag Schedule - <?php echo $currentMonth; ?></title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+
+        h2 {
+            color: #444;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e0e0e0;
+            font-size: 24px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-block;
+            transition: background-color 0.2s;
+        }
+
+        .btn-primary {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #45a049;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .stats {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 4px;
+            margin-bottom: 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            font-size: 13px;
+        }
+
+        th {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 8px;
+            text-align: left;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        td {
+            padding: 10px 8px;
+            border: 1px solid #dee2e6;
+        }
+
+        tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        tr:hover {
+            background: #e9ecef;
+        }
+
+        .tag-code {
+            font-family: 'Courier New', monospace;
+            background: #e7f5e8;
+            padding: 3px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .empty-slot {
+            color: #999;
+            text-align: center;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            margin-bottom: 30px;
+        }
+
+        .priority-1 { background: #ffebee !important; }
+        .priority-2 { background: #fff3e0 !important; }
+        .priority-3 { background: #fff9c4 !important; }
+        .priority-4 { background: #e8f5e9 !important; }
+        .priority-5 { background: #e1f5fe !important; }
+
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #e0e0e0;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Calendar Tag Schedule</h1>
+        <p class="subtitle"><?php echo $currentMonth; ?> (<?php echo $daysInMonth; ?> days)</p>
+
+        <div class="actions">
+            <a href="<?php echo basename($icsFile); ?>" download class="btn btn-primary">Download ICS Calendar File</a>
+            <a href="config-editor.php" class="btn btn-secondary">Edit Configuration</a>
+        </div>
+
+        <!-- Statistics -->
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-value"><?php echo $stats['total_days']; ?></div>
+                <div class="stat-label">Total Days</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value"><?php echo $stats['days_with_content']; ?></div>
+                <div class="stat-label">Days with Content</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value"><?php echo round(($stats['days_with_content'] / $stats['total_days']) * 100, 1); ?>%</div>
+                <div class="stat-label">Fill Rate</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value"><?php echo $stats['used_tags']; ?> / <?php echo $stats['total_tags']; ?></div>
+                <div class="stat-label">Tags Used</div>
+            </div>
+        </div>
+
+        <!-- Schedule Table -->
+        <h2>Schedule</h2>
+        <div class="table-container">
+            <?php echo generateHtmlScheduleTable($scheduler); ?>
+        </div>
+
+        <!-- Tag Summary -->
+        <h2>Tag Summary</h2>
+        <div class="table-container">
+            <?php echo generateHtmlTagSummary($scheduler); ?>
+        </div>
+
+        <div class="footer">
+            <p>Generated by Calendar Tag Scheduler v2</p>
+            <p>Import the ICS file into Google Calendar, Outlook, or any calendar application</p>
+        </div>
+    </div>
+</body>
+</html>
+<?php
+}
+
+/**
+ * Generate HTML schedule table
+ *
+ * @param CalendarTagScheduler $scheduler Scheduler instance
+ * @return string HTML table
+ */
+function generateHtmlScheduleTable($scheduler)
+{
+    $schedule = $scheduler->schedule;
+    $slots = $scheduler->slots;
+
+    $html = '<table>';
+    $html .= '<thead><tr>';
+    $html .= '<th>Date</th>';
+
+    foreach ($slots as $slotName => $_) {
+        $html .= '<th>' . htmlspecialchars($slotName) . '</th>';
+    }
+
+    $html .= '</tr></thead>';
+    $html .= '<tbody>';
+
+    foreach ($schedule as $dateStr => $daySchedule) {
+        $html .= '<tr>';
+        $html .= '<td><strong>' . htmlspecialchars($dateStr) . '</strong></td>';
+
+        foreach ($slots as $slotName => $_) {
+            $tag = $daySchedule[$slotName] ?? null;
+
+            if ($tag === null) {
+                $html .= '<td class="empty-slot">-</td>';
+            } else {
+                $priorityClass = 'priority-' . $tag['priority'];
+                $html .= '<td class="' . $priorityClass . '">';
+                $html .= '<span class="tag-code" title="' . htmlspecialchars($tag['name']) . '">';
+                $html .= htmlspecialchars($tag['code']);
+                $html .= '</span>';
+                $html .= '</td>';
+            }
+        }
+
+        $html .= '</tr>';
+    }
+
+    $html .= '</tbody>';
+    $html .= '</table>';
+
+    return $html;
+}
+
+/**
+ * Generate HTML tag summary table
+ *
+ * @param CalendarTagScheduler $scheduler Scheduler instance
+ * @return string HTML table
+ */
+function generateHtmlTagSummary($scheduler)
+{
+    $tagFirstDates = $scheduler->tagFirstDates;
+    $tags = $scheduler->tags;
+
+    asort($tagFirstDates);
+
+    $html = '<table>';
+    $html .= '<thead><tr>';
+    $html .= '<th>Tag Code</th>';
+    $html .= '<th>Name</th>';
+    $html .= '<th>Priority</th>';
+    $html .= '<th>Period (days)</th>';
+    $html .= '<th>First Date</th>';
+    $html .= '</tr></thead>';
+    $html .= '<tbody>';
+
+    foreach ($tagFirstDates as $code => $firstDate) {
+        $tag = null;
+        foreach ($tags as $t) {
+            if ($t['code'] === $code) {
+                $tag = $t;
+                break;
+            }
+        }
+
+        if ($tag) {
+            $priorityClass = 'priority-' . $tag['priority'];
+            $html .= '<tr class="' . $priorityClass . '">';
+            $html .= '<td><span class="tag-code">' . htmlspecialchars($tag['code']) . '</span></td>';
+            $html .= '<td>' . htmlspecialchars($tag['name']) . '</td>';
+            $html .= '<td>' . htmlspecialchars($tag['priority']) . '</td>';
+            $html .= '<td>' . htmlspecialchars($tag['period']) . '</td>';
+            $html .= '<td>' . htmlspecialchars($firstDate) . '</td>';
+            $html .= '</tr>';
+        }
+    }
+
+    $html .= '</tbody>';
+    $html .= '</table>';
+
+    return $html;
+}
