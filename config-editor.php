@@ -100,8 +100,23 @@ $priorityToPeriod = $config['priorityToPeriod'] ?? [];
 $allowSameDayRepetition = $config['allowSameDayRepetition'] ?? true;
 $tags = $config['tags'] ?? [];
 
-// Available actions
-$availableActions = ['EDU', 'R', 'A', 'V'];
+// Extract available actions from tags (dynamic, user-defined)
+$availableActions = [];
+foreach ($tags as $tag) {
+    if (!empty($tag['action']) && !in_array($tag['action'], $availableActions)) {
+        $availableActions[] = $tag['action'];
+    }
+}
+
+// Add commonly used actions if not already present
+$commonActions = ['EDU', 'R', 'A', 'V', 'D'];
+foreach ($commonActions as $action) {
+    if (!in_array($action, $availableActions)) {
+        $availableActions[] = $action;
+    }
+}
+
+sort($availableActions);
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -316,7 +331,7 @@ $availableActions = ['EDU', 'R', 'A', 'V'];
             <!-- Time Slots Section -->
             <div class="section">
                 <h2>Time Slots</h2>
-                <p>Define time slots and their allowed actions (EDU = Study, R = Read, A = Listen/Audio, V = View/Watch)</p>
+                <p>Define time slots and their allowed actions. Common actions: EDU = Study, R = Read, A = Listen/Audio, V = View/Watch, D = Develop. You can also define custom actions in your tags.</p>
 
                 <table id="slotsTable">
                     <thead>
@@ -402,7 +417,7 @@ $availableActions = ['EDU', 'R', 'A', 'V'];
             <!-- Tags Section -->
             <div class="section">
                 <h2>Tags</h2>
-                <p>Define content tags with their properties</p>
+                <p>Define content tags with their properties. You can use existing actions or type custom ones (e.g., EDU, R, A, V, D, etc.)</p>
 
                 <table id="tagsTable">
                     <thead>
@@ -422,14 +437,7 @@ $availableActions = ['EDU', 'R', 'A', 'V'];
                                 <input type="text" name="tag_names[]" value="<?php echo htmlspecialchars($tag['name']); ?>" required>
                             </td>
                             <td>
-                                <select name="tag_actions[]" required>
-                                    <option value="">-</option>
-                                    <?php foreach ($availableActions as $action): ?>
-                                        <option value="<?php echo $action; ?>" <?php echo ($tag['action'] ?? '') === $action ? 'selected' : ''; ?>>
-                                            <?php echo $action; ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <input type="text" name="tag_actions[]" list="actionsList" value="<?php echo htmlspecialchars($tag['action'] ?? ''); ?>" required placeholder="e.g., EDU, R, A, V, D">
                             </td>
                             <td>
                                 <input type="text" name="tag_types[]" value="<?php echo htmlspecialchars($tag['type'] ?? ''); ?>">
@@ -447,6 +455,13 @@ $availableActions = ['EDU', 'R', 'A', 'V'];
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+
+                <!-- Datalist for action suggestions -->
+                <datalist id="actionsList">
+                    <?php foreach ($availableActions as $action): ?>
+                        <option value="<?php echo htmlspecialchars($action); ?>">
+                    <?php endforeach; ?>
+                </datalist>
 
                 <button type="button" class="btn btn-secondary" onclick="addTagRow()">Add Tag</button>
             </div>
@@ -514,12 +529,7 @@ $availableActions = ['EDU', 'R', 'A', 'V'];
                     <input type="text" name="tag_names[]" required>
                 </td>
                 <td>
-                    <select name="tag_actions[]" required>
-                        <option value="">-</option>
-                        <?php foreach ($availableActions as $action): ?>
-                            <option value="<?php echo $action; ?>"><?php echo $action; ?></option>
-                        <?php endforeach; ?>
-                    </select>
+                    <input type="text" name="tag_actions[]" list="actionsList" required placeholder="e.g., EDU, R, A, V, D">
                 </td>
                 <td>
                     <input type="text" name="tag_types[]">

@@ -11,7 +11,16 @@
 return [
     /**
      * Time slots and their allowed actions
-     * Actions: EDU (Study), R (Read), A (Listen/Audio), V (View/Watch)
+     *
+     * Common actions:
+     * - EDU (Study/Educational)
+     * - R (Read)
+     * - A (Listen/Audio)
+     * - V (View/Watch)
+     * - D (Develop/Create)
+     *
+     * You can define custom actions in your tags and reference them here.
+     * The system dynamically extracts actions from your tags.
      */
     'slots' => [
         'Утро' => ['EDU', 'R'],
@@ -44,6 +53,9 @@ return [
      * Tags data
      * Each tag has: name, action, type, channel, priority (1-5)
      *
+     * You can use standard actions (EDU, R, A, V) or define custom ones (like D for Develop).
+     * Custom actions will be automatically recognized by the system.
+     *
      * Add your own tags below:
      */
     'tags' => [
@@ -54,5 +66,8 @@ return [
         ["name" => "Technical book", "action" => "R", "type" => "TECH", "channel" => "BOOK", "priority" => 4],
         ["name" => "Fiction book", "action" => "R", "type" => "FIC", "channel" => "BOOK", "priority" => 3],
         ["name" => "Watch Later videos", "action" => "V", "type" => "RL", "channel" => "YT", "priority" => 2],
+
+        // Example with custom action 'D' (Develop/Create)
+        // ["name" => "My Project", "action" => "D", "type" => "PHP", "channel" => "GitHub", "priority" => 4],
     ],
 ];
