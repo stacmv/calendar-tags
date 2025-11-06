@@ -328,6 +328,58 @@ sort($availableActions);
 
         <form method="POST" id="configForm">
 
+            <!-- Tags Section -->
+            <div class="section">
+                <h2>Tags</h2>
+                <p>Define content tags with their properties. You can use existing actions or type custom ones (e.g., EDU, R, A, V, D, etc.)</p>
+
+                <table id="tagsTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 25%;">Name</th>
+                            <th style="width: 15%;">Action</th>
+                            <th style="width: 15%;">Type</th>
+                            <th style="width: 15%;">Channel</th>
+                            <th style="width: 10%;">Priority</th>
+                            <th style="width: 80px;">Remove</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($tags as $tag): ?>
+                        <tr class="tag-row">
+                            <td>
+                                <input type="text" name="tag_names[]" value="<?php echo htmlspecialchars($tag['name']); ?>" required>
+                            </td>
+                            <td>
+                                <input type="text" name="tag_actions[]" list="actionsList" value="<?php echo htmlspecialchars($tag['action'] ?? ''); ?>" required placeholder="e.g., EDU, R, A, V, D">
+                            </td>
+                            <td>
+                                <input type="text" name="tag_types[]" value="<?php echo htmlspecialchars($tag['type'] ?? ''); ?>">
+                            </td>
+                            <td>
+                                <input type="text" name="tag_channels[]" value="<?php echo htmlspecialchars($tag['channel'] ?? ''); ?>">
+                            </td>
+                            <td>
+                                <input type="number" name="tag_priorities[]" value="<?php echo $tag['priority']; ?>" min="1" max="10" required>
+                            </td>
+                            <td class="remove-btn-cell">
+                                <button type="button" class="btn btn-danger" onclick="removeRow(this)">Remove</button>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+
+                <!-- Datalist for action suggestions -->
+                <datalist id="actionsList">
+                    <?php foreach ($availableActions as $action): ?>
+                        <option value="<?php echo htmlspecialchars($action); ?>">
+                    <?php endforeach; ?>
+                </datalist>
+
+                <button type="button" class="btn btn-secondary" onclick="addTagRow()">Add Tag</button>
+            </div>
+
             <!-- Time Slots Section -->
             <div class="section">
                 <h2>Time Slots</h2>
@@ -412,58 +464,6 @@ sort($availableActions);
                     Allow same tag to appear multiple times in one day
                 </label>
                 <p class="help-text">If unchecked, each tag will appear at most once per day</p>
-            </div>
-
-            <!-- Tags Section -->
-            <div class="section">
-                <h2>Tags</h2>
-                <p>Define content tags with their properties. You can use existing actions or type custom ones (e.g., EDU, R, A, V, D, etc.)</p>
-
-                <table id="tagsTable">
-                    <thead>
-                        <tr>
-                            <th style="width: 25%;">Name</th>
-                            <th style="width: 15%;">Action</th>
-                            <th style="width: 15%;">Type</th>
-                            <th style="width: 15%;">Channel</th>
-                            <th style="width: 10%;">Priority</th>
-                            <th style="width: 80px;">Remove</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($tags as $tag): ?>
-                        <tr class="tag-row">
-                            <td>
-                                <input type="text" name="tag_names[]" value="<?php echo htmlspecialchars($tag['name']); ?>" required>
-                            </td>
-                            <td>
-                                <input type="text" name="tag_actions[]" list="actionsList" value="<?php echo htmlspecialchars($tag['action'] ?? ''); ?>" required placeholder="e.g., EDU, R, A, V, D">
-                            </td>
-                            <td>
-                                <input type="text" name="tag_types[]" value="<?php echo htmlspecialchars($tag['type'] ?? ''); ?>">
-                            </td>
-                            <td>
-                                <input type="text" name="tag_channels[]" value="<?php echo htmlspecialchars($tag['channel'] ?? ''); ?>">
-                            </td>
-                            <td>
-                                <input type="number" name="tag_priorities[]" value="<?php echo $tag['priority']; ?>" min="1" max="10" required>
-                            </td>
-                            <td class="remove-btn-cell">
-                                <button type="button" class="btn btn-danger" onclick="removeRow(this)">Remove</button>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-
-                <!-- Datalist for action suggestions -->
-                <datalist id="actionsList">
-                    <?php foreach ($availableActions as $action): ?>
-                        <option value="<?php echo htmlspecialchars($action); ?>">
-                    <?php endforeach; ?>
-                </datalist>
-
-                <button type="button" class="btn btn-secondary" onclick="addTagRow()">Add Tag</button>
             </div>
 
             <!-- Actions -->
