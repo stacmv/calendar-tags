@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php scheduler.php:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,0 +1,16 @@
+# Configuration file (contains personal settings)
+config/config.php
+
+# Generated files
+calendar_tags.ics
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
