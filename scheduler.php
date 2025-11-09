@@ -3,7 +3,10 @@
  * Calendar Tag Scheduler v2
  *
  * Гибридный алгоритм распределения тегов по календарю
- * с генерацией повторяющихся событий на весь день в ICS
+ * с генерацией индивидуальных событий в ICS
+ *
+ * Web Mode: Authenticated, uses user-specific config in users/<hash>/
+ * CLI Mode: No authentication, uses config/config.php
  */
 
 // ==================== POLYFILLS ====================
@@ -24,14 +27,42 @@ if (!function_exists('mb_strwidth')) {
     }
 }
 
+// ==================== AUTHENTICATION ====================
+
+// Detect if running in web context
+$isWeb = php_sapi_name() !== 'cli';
+
+if ($isWeb) {
+    require_once 'auth.php';
+    $auth = new Auth();
+    $auth->requireAuth();
+    $userDir = $auth->getUserDir();
+} else {
+    // CLI mode - use default config directory
+    $userDir = null;
+}
+
 // ==================== CONFIGURATION ====================
 
-$configFile = __DIR__ . '/config/config.php';
+// Determine config file path based on context
+if ($userDir !== null) {
+    // Web mode - use user-specific config
+    $configFile = $userDir . '/config.php';
+} else {
+    // CLI mode - use default config
+    $configFile = __DIR__ . '/config/config.php';
+}
 
 if (!file_exists($configFile)) {
-    die("ERROR: Configuration file not found.\n\n" .
-        "Please copy config/config.example.php to config/config.php and customize your settings.\n" .
-        "Example: cp config/config.example.php config/config.php\n");
+    if ($isWeb) {
+        // For web, redirect to config editor if config doesn't exist
+        header('Location: config-editor.php');
+        exit;
+    } else {
+        die("ERROR: Configuration file not found.\n\n" .
+            "Please copy config/config.example.php to config/config.php and customize your settings.\n" .
+            "Example: cp config/config.example.php config/config.php\n");
+    }
 }
 
 $config = require $configFile;
@@ -488,7 +519,7 @@ class CalendarTagScheduler
     }
 
     /**
-     * Generate ICS calendar file with recurring events
+     * Generate ICS calendar file with individual events
      *
      * @param string $filename Output filename
      * @return string Filename created
@@ -505,17 +536,12 @@ class CalendarTagScheduler
 
         $eventId = 1;
 
-        foreach ($this->tagFirstDates as $code => $firstDate) {
-            $tag = null;
-            foreach ($this->tags as $t) {
-                if ($t['code'] === $code) {
-                    $tag = $t;
-                    break;
+        // Iterate through schedule and create individual events
+        foreach ($this->schedule as $dateStr => $daySchedule) {
+            foreach ($daySchedule as $slotName => $tag) {
+                if ($tag !== null) {
+                    $ics .= $this->createSingleEvent($dateStr, $slotName, $tag, $eventId++);
                 }
-            }
-
-            if ($tag) {
-                $ics .= $this->createRecurringEvent($firstDate, $tag, $eventId++);
             }
         }
 
@@ -526,26 +552,24 @@ class CalendarTagScheduler
     }
 
     /**
-     * Create recurring event for ICS file
+     * Create single event for ICS file
      *
-     * @param string $dateStr Start date (YYYY-MM-DD)
+     * @param string $dateStr Event date (YYYY-MM-DD)
+     * @param string $slotName Time slot name
      * @param array $tag Tag data
      * @param int $id Event ID
      * @return string ICS VEVENT block
      */
-    private function createRecurringEvent($dateStr, $tag, $id)
+    private function createSingleEvent($dateStr, $slotName, $tag, $id)
     {
         $date = new DateTime($dateStr);
         $dateFormatted = $date->format('Ymd');
 
-        $slotName = $this->tagFirstSlots[$tag['code']] ?? '';
-
         $event = "BEGIN:VEVENT\r\n";
-        $event .= "UID:tag-{$id}@scheduler\r\n";
+        $event .= "UID:tag-{$id}-{$dateFormatted}@scheduler\r\n";
         $event .= "DTSTAMP:" . date('Ymd\\THis\\Z') . "\r\n";
         $event .= "DTSTART;VALUE=DATE:{$dateFormatted}\r\n";
-        $event .= "RRULE:FREQ=DAILY;INTERVAL={$tag['period']}\r\n";
-        $event .= "SUMMARY:{$slotName}:{$tag['code']}\r\n";
+        $event .= "SUMMARY:{$slotName}: {$tag['code']}\r\n";
 
         $actionNames = [
             'EDU' => 'Изучать',
@@ -554,7 +578,7 @@ class CalendarTagScheduler
             'V' => 'Смотреть'
         ];
         $actionName = $actionNames[$tag['action']] ?? $tag['action'];
-        $event .= "DESCRIPTION:{$tag['name']} ({$actionName}, каждые {$tag['period']} дней)\r\n";
+        $event .= "DESCRIPTION:{$tag['name']} ({$actionName})\r\n";
         $event .= "CATEGORIES:{$tag['action']}\r\n";
         $event .= "STATUS:CONFIRMED\r\n";
         $event .= "TRANSP:TRANSPARENT\r\n";
@@ -627,10 +651,12 @@ $startDate = date('Y-m-01');
 $daysInMonth = date('t');
 $scheduler->generateSchedule($startDate, $daysInMonth);
 
-$icsFile = $scheduler->generateICS('calendar_tags.ics');
-
-// Detect if running in web context
-$isWeb = php_sapi_name() !== 'cli';
+// Generate ICS file in user-specific directory for web, root for CLI
+if ($userDir !== null) {
+    $icsFile = $scheduler->generateICS($userDir . '/calendar_tags.ics');
+} else {
+    $icsFile = $scheduler->generateICS('calendar_tags.ics');
+}
 
 if ($isWeb) {
     // Web output - HTML
@@ -647,8 +673,18 @@ if ($isWeb) {
 
     echo "\n\n=== ICS-ФАЙЛ СОЗДАН ===\n";
     echo "Файл: $icsFile\n";
-    echo "Формат: События на весь день с правилами повторения (RRULE)\n";
-    echo "Каждый тег появляется как отдельное повторяющееся событие.\n";
+    echo "Формат: Индивидуальные события на весь день\n";
+
+    // Count total events created
+    $eventCount = 0;
+    foreach ($scheduler->schedule as $daySchedule) {
+        foreach ($daySchedule as $tag) {
+            if ($tag !== null) {
+                $eventCount++;
+            }
+        }
+    }
+    echo "Создано событий: $eventCount\n";
     echo "Вы можете импортировать его в Google Calendar, Outlook или другой календарь.\n";
 }
 
@@ -849,8 +885,9 @@ function outputHtml($scheduler, $icsFile, $startDate, $daysInMonth)
         <p class="subtitle"><?php echo $currentMonth; ?> (<?php echo $daysInMonth; ?> days)</p>
 
         <div class="actions">
-            <a href="<?php echo basename($icsFile); ?>" download class="btn btn-primary">Download ICS Calendar File</a>
+            <a href="<?php echo htmlspecialchars($icsFile); ?>" download class="btn btn-primary">Download ICS Calendar File</a>
             <a href="config-editor.php" class="btn btn-secondary">Edit Configuration</a>
+            <a href="logout.php" class="btn btn-secondary">Logout</a>
         </div>
 
         <!-- Statistics -->

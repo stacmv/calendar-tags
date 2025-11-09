@@ -17,3 +17,5 @@ Thumbs.db
 # Planning Framework - Keep these files versioned
 # docs/prd.md
 # docs/planning/
+users/
+.htpasswd

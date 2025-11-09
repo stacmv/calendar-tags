@@ -5,7 +5,14 @@
  * Provides navigation to the main features
  */
 
-$configFile = __DIR__ . '/config/config.php';
+require_once 'auth.php';
+
+$auth = new Auth();
+$auth->requireAuth();
+
+$username = $auth->getUsername();
+$userDir = $auth->getUserDir();
+$configFile = $userDir . '/config.php';
 $configExists = file_exists($configFile);
 ?>
 <!DOCTYPE html>
@@ -184,6 +191,11 @@ $configExists = file_exists($configFile);
 </head>
 <body>
     <div class="container">
+        <div style="text-align: right; margin-bottom: 20px;">
+            <span style="color: #666; margin-right: 10px;">User: <?php echo htmlspecialchars($username); ?></span>
+            <a href="logout.php" class="btn btn-secondary" style="padding: 8px 16px; font-size: 12px;">Logout</a>
+        </div>
+
         <h1>Calendar Tag Scheduler</h1>
         <p class="subtitle">
             A priority-based scheduling system for managing your content consumption across daily time slots
@@ -192,7 +204,7 @@ $configExists = file_exists($configFile);
         <?php if (!$configExists): ?>
         <div class="alert">
             <div class="alert-title">Configuration Required</div>
-            <p>No configuration file found. Please use the Config Editor to create your settings, or copy config/config.example.php to config/config.php manually.</p>
+            <p>No configuration file found. Please use the Config Editor to create your settings.</p>
         </div>
         <?php endif; ?>
 

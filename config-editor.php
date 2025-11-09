@@ -2,10 +2,17 @@
 /**
  * Web-based Configuration Editor for Calendar Tag Scheduler
  *
- * Provides a simple web interface to edit config/config.php
+ * Provides a simple web interface to edit user-specific config
  */
 
-$configFile = __DIR__ . '/config/config.php';
+require_once 'auth.php';
+
+$auth = new Auth();
+$auth->requireAuth();
+$userDir = $auth->getUserDir();
+$username = $auth->getUsername();
+
+$configFile = $userDir . '/config.php';
 $configExampleFile = __DIR__ . '/config/config.example.php';
 
 // Load current config or use example
@@ -80,12 +87,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Save to file
         if (file_put_contents($configFile, $configCode)) {
-            $message = "Configuration saved successfully to config/config.php!";
+            $message = "Configuration saved successfully!";
             $messageType = 'success';
             // Reload config
             $config = require $configFile;
         } else {
-            $message = "ERROR: Failed to write to config/config.php. Check file permissions.";
+            $message = "ERROR: Failed to write configuration. Check file permissions.";
             $messageType = 'error';
         }
     } catch (Exception $e) {
@@ -317,8 +324,13 @@ sort($availableActions);
 </head>
 <body>
     <div class="container">
-        <h1>Calendar Tag Scheduler</h1>
-        <p class="subtitle">Configuration Editor</p>
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 20px;">
+            <div>
+                <h1>Calendar Tag Scheduler</h1>
+                <p class="subtitle">Configuration Editor - User: <?php echo htmlspecialchars($username); ?></p>
+            </div>
+            <a href="logout.php" class="btn btn-secondary" style="text-decoration: none;">Logout</a>
+        </div>
 
         <?php if ($message): ?>
             <div class="message <?php echo $messageType; ?>">
@@ -470,6 +482,7 @@ sort($availableActions);
             <div class="actions">
                 <button type="submit" class="btn btn-primary">Save Configuration</button>
                 <a href="scheduler.php" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">View Schedule</a>
+                <a href="logout.php" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">Logout</a>
             </div>
         </form>
     </div>
