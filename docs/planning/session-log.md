@@ -2,7 +2,7 @@
 
 **Project:** Calendar Tag Scheduler
 **Started:** 2025-11-06
-**Last Updated:** 2025-11-06
+**Last Updated:** 2025-11-09
 
 ---
 
@@ -68,6 +68,71 @@ This log maintains continuity between development sessions. Each entry captures:
 ---
 
 ## Session Entries
+
+### Session: 2025-11-09 (Duration: ~2 hours)
+
+**Phase:** Enhancement
+**Goal:** Add multi-user authentication system with user-specific data isolation, and convert ICS from recurring to individual events
+
+#### Completed
+- [x] Changed ICS generation from recurring events (RRULE) to individual events
+- [x] Created authentication system with .htpasswd support
+- [x] Implemented Auth class with bcrypt password hashing
+- [x] Created login.php with session management
+- [x] Created logout.php for session destruction
+- [x] Created setup-user.php CLI tool for user management
+- [x] Updated scheduler.php for user-specific paths in web mode
+- [x] Updated config-editor.php for user-specific config editing
+- [x] Updated index.php with authentication
+- [x] Added user directory isolation (users/<hash>/)
+- [x] Updated .gitignore to exclude users/ and .htpasswd
+- [x] Created SETUP.md with authentication documentation
+- [x] Updated CLAUDE.md with authentication architecture
+- [x] Fixed UX issue: disabled "View Schedule" button until config is saved
+- [x] Added auto-redirect after config save to refresh button state
+- [x] Added informational message for first-time config setup
+- [x] Tested locally with PHP built-in server
+- [x] Committed and pushed all changes
+
+#### Decisions Made
+1. **Password Hashing:** Chose bcrypt (PASSWORD_BCRYPT) for new users, with backward compatibility for Apache MD5 (apr1) and plain MD5
+   - Rationale: Bcrypt is more secure, but maintaining compatibility with existing .htpasswd files
+2. **User Directory Naming:** Use 8-character MD5 hash of username
+   - Rationale: Privacy (usernames not visible in filesystem), short paths, deterministic
+3. **Dual-Mode Operation:** Web mode (authenticated) vs CLI mode (unauthenticated)
+   - Rationale: Preserve backward compatibility for CLI users while adding web authentication
+4. **ICS Individual Events:** Changed from recurring events to individual events per occurrence
+   - Rationale: User requested this change; cleaner separation of monthly schedules
+5. **Auto-redirect after save:** Redirect to config-editor.php?saved=1 after successful save
+   - Rationale: User reported "View Schedule" button didn't enable without F5 refresh
+
+#### Blockers & Issues
+- [x] **Resolved:** "View Schedule" button didn't enable after save - fixed with redirect
+- No current blockers
+
+#### Code Changes
+- **New files:** auth.php, login.php, logout.php, setup-user.php, SETUP.md
+- **Modified files:** scheduler.php, config-editor.php, index.php, CLAUDE.md, .gitignore
+- **Tests:** Manually tested with 3 test users (testuser, alice, bob) via local server
+- **Commits:** 2 commits
+  - `8a27cdd` - Add authentication system with user-specific data isolation
+  - Previous commit with ICS changes
+
+#### Learnings & Notes
+- PHP sessions work seamlessly with built-in server for testing
+- User isolation pattern (hash-based directories) works well for multi-tenant scenarios
+- Important to provide clear UX feedback (disabled buttons, info messages) when user needs to complete setup steps
+
+#### Next Session Priorities
+1. [ ] **Optional:** Add "remember me" functionality to login
+2. [ ] **Optional:** Add user profile page (change password, view stats)
+3. [ ] **Optional:** Add export/import configuration functionality
+4. [ ] **Consider:** Email notifications for schedule generation
+5. [ ] **Consider:** API endpoints for programmatic access
+
+**Estimated time needed:** 2-3 hours (if pursuing optional features)
+
+---
 
 ### Session: 2025-11-06 (Duration: X hours)
 

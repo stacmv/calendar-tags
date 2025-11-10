@@ -2,7 +2,7 @@
 
 **Project:** Calendar Tag Scheduler
 **Started:** 2025-11-06
-**Last Updated:** 2025-11-06
+**Last Updated:** 2025-11-09
 
 ---
 
@@ -38,106 +38,194 @@ Quick reference to all decisions:
 
 | ADR | Title | Status | Date |
 |-----|-------|--------|------|
-| [ADR-001](#adr-001-decision-title) | [Decision Title] | Accepted | 2025-11-06 |
-| [ADR-002](#adr-002-decision-title) | [Decision Title] | Accepted | 2025-11-06 |
-| [ADR-003](#adr-003-decision-title) | [Decision Title] | Superseded | 2025-11-06 |
+| [ADR-001](#adr-001-multi-user-authentication-with-htpasswd) | Multi-User Authentication with .htpasswd | Accepted | 2025-11-09 |
+| [ADR-002](#adr-002-individual-ics-events-instead-of-recurring) | Individual ICS Events Instead of Recurring | Accepted | 2025-11-09 |
 
 ---
 
 ## Decisions
 
-### ADR-001: [Decision Title]
+### ADR-001: Multi-User Authentication with .htpasswd
 
-**Date:** 2025-11-06
-**Status:** Proposed | Accepted | Superseded | Deprecated
+**Date:** 2025-11-09
+**Status:** Accepted
 
 #### Context
 
-[What problem are we solving? What constraints exist? What triggered this decision?]
+The Calendar Tag Scheduler web interface needed user authentication and data isolation to support multiple users.
 
 **Background:**
-- Current situation: [Description]
-- Problem: [What's not working or needs to be decided]
-- Constraints: [Technical, time, budget, or other limitations]
+- Current situation: Single-user application with config/config.php and calendar_tags.ics in root directory
+- Problem: Multiple users would overwrite each other's configurations and ICS files
+- Trigger: Request to add login/password protection and user-specific data storage
+- Constraints: Must preserve CLI mode for existing single-user workflows
 
 #### Options Considered
 
-**Option 1: [Option Name]**
-- Description: [How this would work]
+**Option 1: Database-backed authentication (MySQL/PostgreSQL)**
+- Description: Full user management system with database tables for users, sessions, and configs
 - Pros:
-  - [Advantage 1]
-  - [Advantage 2]
+  - Rich querying capabilities
+  - Easier to add features (password reset, email verification)
+  - Industry standard approach
 - Cons:
-  - [Disadvantage 1]
-  - [Disadvantage 2]
+  - Requires database server setup
+  - More complex deployment
+  - Overkill for simple multi-user needs
+  - External dependency
 
-**Option 2: [Option Name]**
-- Description: [How this would work]
+**Option 2: .htpasswd file authentication**
+- Description: Use Apache-style .htpasswd file with bcrypt hashes, PHP sessions, user directories
 - Pros:
-  - [Advantage 1]
-  - [Advantage 2]
+  - No external dependencies (file-based)
+  - Simple deployment (just copy files)
+  - Compatible with existing Apache .htpasswd tools
+  - Lightweight and fast
+  - Easy backup (just copy .htpasswd and users/ directory)
 - Cons:
-  - [Disadvantage 1]
-  - [Disadvantage 2]
+  - Limited scalability (thousands of users would be slow)
+  - No built-in password reset mechanism
+  - Manual user management via CLI
 
-**Option 3: [Option Name]**
-- Description: [How this would work]
-- Pros: [...]
-- Cons: [...]
+**Option 3: Third-party authentication (OAuth, LDAP)**
+- Description: Integrate with external auth providers
+- Pros:
+  - Centralized authentication
+  - Single sign-on capabilities
+- Cons:
+  - External dependency
+  - Complex setup
+  - Network dependency
+  - Overkill for self-hosted tool
 
 #### Decision
 
-**We chose: [Option Name]**
+**We chose: .htpasswd file authentication**
 
-[1-2 sentence summary of the decision]
+Use file-based authentication with .htpasswd for credentials and user-specific directories for data isolation.
 
 #### Rationale
 
-[Explain WHY this option was chosen. This is the most important section.]
-
 **Key factors:**
-- Factor 1: [Explanation]
-- Factor 2: [Explanation]
-- Factor 3: [Explanation]
+- **Simplicity:** Target audience is 1-10 users (personal/small team use), not enterprise scale
+- **Zero dependencies:** No database server required, works anywhere PHP runs
+- **Familiar tooling:** .htpasswd is well-known, tools exist (htpasswd, setup-user.php)
+- **Backward compatibility:** CLI mode continues to work without authentication
+- **Easy deployment:** Just copy files, no database migrations
 
 **Trade-offs accepted:**
-- [What we're giving up by choosing this option]
-- [Why the trade-off is acceptable]
+- Limited to ~100-1000 users before performance degrades (acceptable for use case)
+- No built-in password reset UI (mitigated by CLI tool: php setup-user.php user newpass)
+- Manual user provisioning (acceptable for small team scenario)
 
 #### Consequences
 
 **Positive:**
-- [Benefit 1]
-- [Benefit 2]
-- [Benefit 3]
+- Simple deployment: copy project, run setup-user.php, done
+- Easy backup: just tar .htpasswd and users/ directory
+- No external dependencies
+- Works on any hosting (shared hosting, VPS, localhost)
+- CLI mode preserved for single-user workflows
 
 **Negative:**
-- [Trade-off or limitation 1]
-- [Trade-off or limitation 2]
-- [Mitigation strategy, if any]
+- Scaling limitation (not suitable for public SaaS with 1000s of users)
+- No password reset email flow (users must contact admin)
+- User provisioning requires CLI access
 
 **Neutral (implications to be aware of):**
-- [Implication 1]
-- [Implication 2]
+- PHP sessions used (requires session storage, cookie support)
+- User directory naming uses MD5 hash (good for privacy, but means filenames don't match usernames)
 
 #### Implementation Notes
 
-[Optional: Specific guidance for implementing this decision]
-
-- [Note 1]
-- [Note 2]
-
-#### Related Decisions
-
-- Relates to [ADR-XXX]
-- Supersedes [ADR-XXX]
-- Superseded by [ADR-XXX]
+- Created `auth.php` class with bcrypt password hashing
+- Support for legacy Apache MD5 (apr1) and plain MD5 for backward compatibility
+- User directories: `users/<8-char-md5-hash>/`
+- Each user gets isolated: `config.php` and `calendar_tags.ics`
+- CLI tool: `php setup-user.php username password`
+- Dual-mode operation: web (authenticated) vs CLI (unauthenticated)
 
 ---
 
-### ADR-002: [Next Decision]
+### ADR-002: Individual ICS Events Instead of Recurring
 
-[Repeat structure above]
+**Date:** 2025-11-09
+**Status:** Accepted
+
+#### Context
+
+The scheduler originally generated recurring ICS events using RRULE (Recurrence Rule) to represent repeated tag occurrences.
+
+**Background:**
+- Current situation: Each tag generated ONE recurring event with RRULE (e.g., FREQ=DAILY;INTERVAL=4)
+- Problem: User requested individual events instead of recurring patterns
+- Trigger: User feedback - wanted ICS file to contain only current month's events as individual entries
+- Constraint: Must match what's shown in the schedule table output
+
+#### Options Considered
+
+**Option 1: Keep recurring events (RRULE)**
+- Description: Maintain current approach with one event per tag using recurrence rules
+- Pros:
+  - Fewer events in ICS file (one per tag)
+  - Compact file size
+  - Represents recurring pattern conceptually
+- Cons:
+  - User doesn't want this approach
+  - Calendar apps may show events beyond current month
+  - Less clear what's scheduled on specific dates
+
+**Option 2: Individual events for each occurrence**
+- Description: Generate separate VEVENT for each scheduled tag occurrence
+- Pros:
+  - Exact match with schedule table
+  - Clear per-date events
+  - No confusion about recurrence rules
+  - Monthly ICS files naturally scoped
+- Cons:
+  - Larger ICS files (162 events vs 23 for November)
+  - More events to import
+
+#### Decision
+
+**We chose: Individual events for each occurrence**
+
+Generate one VEVENT per tag occurrence, matching exactly what appears in the schedule table.
+
+#### Rationale
+
+**Key factors:**
+- **User preference:** Explicit request from user
+- **Clarity:** Each scheduled occurrence is explicitly represented
+- **Monthly scope:** Since scheduler runs for current month, ICS naturally contains only that month
+- **Visual consistency:** ICS matches schedule table 1:1
+
+**Trade-offs accepted:**
+- Larger ICS files (acceptable for monthly scope)
+- More events to import (but calendar apps handle this fine)
+
+#### Consequences
+
+**Positive:**
+- ICS file exactly matches what user sees in schedule table
+- No ambiguity about which dates have which tags
+- Natural monthly boundaries (regenerate each month)
+- Easier to understand for users
+
+**Negative:**
+- ~6-7x more events in ICS file (e.g., 162 vs 23)
+- Must regenerate monthly (but scheduler already runs monthly)
+
+**Neutral:**
+- File size increase is negligible (text files, ~15KB vs ~3KB)
+
+#### Implementation Notes
+
+- Changed `generateICS()` to iterate through `$schedule` array
+- Replaced `createRecurringEvent()` with `createSingleEvent()`
+- Each event gets unique UID: `tag-{id}-{date}@scheduler`
+- Removed RRULE entirely
+- Event summary includes slot name: "Утро: EDU-TECH-YT"
 
 ---
 

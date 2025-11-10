@@ -15,8 +15,11 @@ $username = $auth->getUsername();
 $configFile = $userDir . '/config.php';
 $configExampleFile = __DIR__ . '/config/config.example.php';
 
+// Check if user has saved config before
+$configExists = file_exists($configFile);
+
 // Load current config or use example
-if (file_exists($configFile)) {
+if ($configExists) {
     $config = require $configFile;
 } elseif (file_exists($configExampleFile)) {
     $config = require $configExampleFile;
@@ -26,6 +29,12 @@ if (file_exists($configFile)) {
 
 $message = '';
 $messageType = '';
+
+// Check if redirected after successful save
+if (isset($_GET['saved']) && $_GET['saved'] == '1') {
+    $message = "Configuration saved successfully!";
+    $messageType = 'success';
+}
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -87,10 +96,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Save to file
         if (file_put_contents($configFile, $configCode)) {
-            $message = "Configuration saved successfully!";
-            $messageType = 'success';
-            // Reload config
-            $config = require $configFile;
+            // Redirect to refresh page and update button state
+            header('Location: config-editor.php?saved=1');
+            exit;
         } else {
             $message = "ERROR: Failed to write configuration. Check file permissions.";
             $messageType = 'error';
@@ -287,6 +295,17 @@ sort($availableActions);
             background: #5a6268;
         }
 
+        .btn-disabled {
+            background: #ccc;
+            color: #666;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .btn-disabled:hover {
+            background: #ccc;
+        }
+
         .btn-danger {
             background: #dc3545;
             color: white;
@@ -335,6 +354,12 @@ sort($availableActions);
         <?php if ($message): ?>
             <div class="message <?php echo $messageType; ?>">
                 <?php echo htmlspecialchars($message); ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if (!$configExists && !$message): ?>
+            <div class="message info" style="background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460;">
+                <strong>First Time Setup:</strong> Configure your tags, slots, and priorities below, then click "Save Configuration" to get started.
             </div>
         <?php endif; ?>
 
@@ -481,7 +506,11 @@ sort($availableActions);
             <!-- Actions -->
             <div class="actions">
                 <button type="submit" class="btn btn-primary">Save Configuration</button>
-                <a href="scheduler.php" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">View Schedule</a>
+                <?php if ($configExists): ?>
+                    <a href="scheduler.php" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">View Schedule</a>
+                <?php else: ?>
+                    <span class="btn btn-disabled" style="text-decoration: none; display: inline-block;" title="Please save your configuration first">View Schedule (Save First)</span>
+                <?php endif; ?>
                 <a href="logout.php" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">Logout</a>
             </div>
         </form>
