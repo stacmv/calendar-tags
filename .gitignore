@@ -14,3 +14,8 @@ Thumbs.db
 *.swp
 *.swo
 *~
+# Planning Framework - Keep these files versioned
+# docs/prd.md
+# docs/planning/
+users/
+.htpasswd

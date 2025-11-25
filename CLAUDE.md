@@ -4,19 +4,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Calendar Tag Scheduler is a PHP-based information consumption management system that distributes content sources (YouTube playlists, podcasts, books, RSS feeds, Telegram channels, etc.) across daily time slots using a priority-based hybrid scheduling algorithm. It generates both visual schedules (Markdown/ASCII tables) and importable recurring calendar events (ICS format).
+Calendar Tag Scheduler is a PHP-based information consumption management system that distributes content sources (YouTube playlists, podcasts, books, RSS feeds, Telegram channels, etc.) across daily time slots using a priority-based hybrid scheduling algorithm. It generates both visual schedules (Markdown/ASCII tables) and importable individual calendar events (ICS format).
 
 ## File Structure
 
 ```
 calendar-tags/
 ├── config/
-│   ├── config.php          # Personal configuration (gitignored)
+│   ├── config.php          # Default configuration (for CLI mode)
 │   ├── config.example.php  # Configuration template
 │   └── README.md          # Config documentation
-├── scheduler.php          # Main application
-├── calendar_tags.ics      # Generated ICS file (gitignored)
+├── users/                 # User-specific data (gitignored)
+│   └── <hash>/           # Each user's directory
+│       ├── config.php    # User configuration
+│       └── calendar_tags.ics
+├── auth.php              # Authentication helper class
+├── login.php             # Login page
+├── logout.php            # Logout handler
+├── setup-user.php        # CLI user creation/management
+├── index.php             # Landing page (authenticated)
+├── scheduler.php         # Main application (web + CLI)
+├── config-editor.php     # Web-based config editor
+├── calendar_tags.ics     # Generated ICS (CLI mode, gitignored)
+├── .htpasswd             # User credentials (gitignored)
 ├── CLAUDE.md             # This file
+├── SETUP.md              # Setup and authentication guide
 └── .gitignore            # Git ignore rules
 ```
 
@@ -51,6 +63,30 @@ calendar-tags/
 
 ## Running the Code
 
+### Web Interface (Multi-User with Authentication)
+
+**Initial Setup:**
+```bash
+# Create a user account
+php setup-user.php <username> <password>
+
+# Start web server (or use Apache/Nginx)
+php -S localhost:8000
+
+# Visit http://localhost:8000/login.php
+# Login with your credentials
+# Configure tags via config editor
+# View schedule and download ICS
+```
+
+**User Management:**
+- Each user gets isolated data in `users/<hash>/`
+- Config stored per-user: `users/<hash>/config.php`
+- ICS generated per-user: `users/<hash>/calendar_tags.ics`
+- See `SETUP.md` for detailed authentication documentation
+
+### CLI Mode (Single-User, No Authentication)
+
 **Initial Setup:**
 ```bash
 # Copy configuration template
@@ -71,7 +107,7 @@ This will:
 3. Output a formatted ASCII table of the entire month
 4. Create a tag summary table sorted by first usage date
 5. Generate statistics (fill rate, tag usage, etc.)
-6. Create `calendar_tags.ics` file with recurring events
+6. Create `calendar_tags.ics` file with individual events for each scheduled occurrence
 
 **Modify the schedule**: Edit `config/config.php`:
 - `tags` array: Add/modify tags with name, action, type, channel, priority
@@ -102,14 +138,14 @@ The hybrid priority-based scheduling algorithm works as follows:
 - `CalendarTagScheduler` - Main class with full PHPDoc documentation
 - Properties: `$tags`, `$slots`, `$priorityToPeriod`, `$schedule`, `$lastUsed`, `$tagFirstDates`, `$allowSameDayRepetition`
 - Public methods: `__construct()`, `generateSchedule()`, `getScheduleTable()`, `getScheduleTableFormatted()`, `getTagSummary()`, `getTagSummaryFormatted()`, `generateICS()`, `getStatistics()`, `printStatistics()`, `setPriorityToPeriod()`
-- Private methods: `initializeTags()`, `generateCode()`, `getAvailableTags()`, `selectBestTag()`, `createRecurringEvent()`, `getStringLength()`
+- Private methods: `initializeTags()`, `generateCode()`, `getAvailableTags()`, `selectBestTag()`, `createSingleEvent()`, `getStringLength()`
 
-**ICS Generation** (scheduler.php:539-605):
-- Creates ONE recurring event per tag (not individual events per occurrence)
-- Uses RRULE (recurrence rule) with `FREQ=DAILY;INTERVAL=N`
+**ICS Generation** (scheduler.php:490-557):
+- Creates individual events for each scheduled occurrence in the month
+- No recurring events (no RRULE) - one VEVENT per tag occurrence
 - All-day events (`DTSTART;VALUE=DATE`)
 - RFC 5545 compliant for compatibility with Google Calendar, Outlook, Apple Calendar
-- Event starts on first scheduled appearance date
+- Each event includes slot name and tag code in summary (e.g., "Утро: EDU-TECH-YT")
 
 ## Important Implementation Details
 
@@ -119,7 +155,7 @@ The hybrid priority-based scheduling algorithm works as follows:
 
 **ICS Date Format**: Events use `VALUE=DATE` format (YYYYMMDD) without time component to create all-day events that don't trigger time-specific notifications.
 
-**First Appearance Tracking** (scheduler.php:247-249): The `$tagFirstDates` array records when each tag first appears in the schedule, used as the DTSTART for recurring ICS events.
+**First Appearance Tracking** (scheduler.php:203-206): The `$tagFirstDates` array records when each tag first appears in the schedule, used for tag summary display.
 
 **UTF-8 Support** (scheduler.php:11-25): Custom polyfills for `mb_strlen` and `mb_strwidth` ensure proper Cyrillic text handling on systems without mbstring extension.
 
@@ -140,3 +176,122 @@ See docs/prd.md sections 6.1-6.3 for planned enhancements including:
 - Enhanced ICS features (alarms, color coding, timezone support)
 - Web interface for visual editing
 - API integrations with content platforms
+
+# ========================================
+# Planning Framework Integration
+# ========================================
+
+# CLAUDE.md Instructions
+
+Copy this section into your project's `CLAUDE.md` file to integrate the Planning Framework.
+
+---
+
+## Starting a New Session
+
+**IMPORTANT:** Before starting any work, follow these steps to restore context:
+
+1. **Read session log** - See what was done last time and what's next:
+   ```bash
+   tail -50 docs/planning/session-log.md
+   ```
+
+2. **Check implementation status** - Review current phase and next task:
+   ```bash
+   head -40 docs/planning/implementation-plan.md
+   ```
+
+3. **Review decisions** - Refresh on architectural choices:
+   ```bash
+   cat docs/planning/decisions.md
+   ```
+
+4. **Start the task** - Begin with the task marked "Next Session" in implementation plan
+
+**Planning Infrastructure Location:**
+- `/docs/planning/implementation-plan.md` - Detailed task breakdown, component specs, progress tracking
+- `/docs/planning/session-log.md` - Session-by-session progress and notes
+- `/docs/planning/decisions.md` - Architecture Decision Records (ADR)
+- `/docs/prd.md` - Product Requirements Document (what and why)
+
+---
+
+## Session End Ritual
+
+Before ending a session, **ALWAYS**:
+
+1. **Update session log** - Add entry to `docs/planning/session-log.md`:
+   - Completed tasks (with checkboxes)
+   - Decisions made (reference ADRs)
+   - Any blockers
+   - Next session priorities
+
+2. **Update implementation plan** - In `docs/planning/implementation-plan.md`:
+   - Check off completed tasks
+   - Update "Quick Status" section
+   - Mark next task clearly
+
+3. **Document decisions** - Add to `docs/planning/decisions.md`:
+   - Create ADR for any architectural decisions
+   - Use standard ADR format
+
+4. **Commit changes**:
+   ```bash
+   git add .
+   git commit -m "Session YYYY-MM-DD: [Brief description]"
+   ```
+
+---
+
+## Planning Framework Usage
+
+This project uses a structured planning framework to maintain context across sessions.
+
+**Key principles:**
+- All progress tracked with checkboxes
+- Decisions documented with rationale (ADRs)
+- Next steps always clearly marked
+- Context preserved for AI assistants
+
+**For detailed framework documentation:**
+- See `/docs/planning/FRAMEWORK.md` for complete guide
+- See `/docs/planning/templates/` for document templates
+
+---
+
+## What AI Assistants Should Do
+
+**On every session start:**
+1. ✅ Read the three core planning documents (session log, implementation plan, decisions)
+2. ✅ Understand current phase and next task
+3. ✅ Ask clarifying questions if context is unclear
+4. ✅ Follow patterns and decisions documented in decisions.md
+
+**During session:**
+1. ✅ Update progress immediately (don't batch updates)
+2. ✅ Document decisions as they're made (ADR format)
+3. ✅ Note any blockers in real-time
+4. ✅ Commit frequently with clear messages
+
+**Before session ends:**
+1. ✅ Update all three core documents
+2. ✅ Mark next task clearly
+3. ✅ Ensure "Quick Status" reflects reality
+4. ✅ Create git commit with session summary
+
+**Never:**
+- ❌ Skip reading planning docs at session start
+- ❌ Make architectural decisions without documenting (ADR)
+- ❌ Complete tasks without updating implementation plan
+- ❌ End session without updating session log
+
+---
+
+## Customization Notes
+
+[Add any project-specific planning instructions here]
+
+---
+
+**Planning Framework Version:** 1.0
+**Last Updated:** YYYY-MM-DD
