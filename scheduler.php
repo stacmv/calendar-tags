@@ -488,7 +488,7 @@ class CalendarTagScheduler
     }
 
     /**
-     * Generate ICS calendar file with recurring events
+     * Generate ICS calendar file with individual events
      *
      * @param string $filename Output filename
      * @return string Filename created
@@ -505,17 +505,11 @@ class CalendarTagScheduler
 
         $eventId = 1;
 
-        foreach ($this->tagFirstDates as $code => $firstDate) {
-            $tag = null;
-            foreach ($this->tags as $t) {
-                if ($t['code'] === $code) {
-                    $tag = $t;
-                    break;
+        foreach ($this->schedule as $dateStr => $daySchedule) {
+            foreach ($daySchedule as $slotName => $tag) {
+                if ($tag !== null) {
+                    $ics .= $this->createSingleEvent($dateStr, $slotName, $tag, $eventId++);
                 }
-            }
-
-            if ($tag) {
-                $ics .= $this->createRecurringEvent($firstDate, $tag, $eventId++);
             }
         }
 
@@ -526,26 +520,24 @@ class CalendarTagScheduler
     }
 
     /**
-     * Create recurring event for ICS file
+     * Create single event for ICS file
      *
-     * @param string $dateStr Start date (YYYY-MM-DD)
+     * @param string $dateStr Event date (YYYY-MM-DD)
+     * @param string $slotName Time slot name
      * @param array $tag Tag data
      * @param int $id Event ID
      * @return string ICS VEVENT block
      */
-    private function createRecurringEvent($dateStr, $tag, $id)
+    private function createSingleEvent($dateStr, $slotName, $tag, $id)
     {
         $date = new DateTime($dateStr);
         $dateFormatted = $date->format('Ymd');
-
-        $slotName = $this->tagFirstSlots[$tag['code']] ?? '';
 
         $event = "BEGIN:VEVENT\r\n";
         $event .= "UID:tag-{$id}@scheduler\r\n";
         $event .= "DTSTAMP:" . date('Ymd\\THis\\Z') . "\r\n";
         $event .= "DTSTART;VALUE=DATE:{$dateFormatted}\r\n";
-        $event .= "RRULE:FREQ=DAILY;INTERVAL={$tag['period']}\r\n";
-        $event .= "SUMMARY:{$slotName}:{$tag['code']}\r\n";
+        $event .= "SUMMARY:{$slotName}: {$tag['code']}\r\n";
 
         $actionNames = [
             'EDU' => 'Изучать',
@@ -554,7 +546,7 @@ class CalendarTagScheduler
             'V' => 'Смотреть'
         ];
         $actionName = $actionNames[$tag['action']] ?? $tag['action'];
-        $event .= "DESCRIPTION:{$tag['name']} ({$actionName}, каждые {$tag['period']} дней)\r\n";
+        $event .= "DESCRIPTION:{$tag['name']} ({$actionName})\r\n";
         $event .= "CATEGORIES:{$tag['action']}\r\n";
         $event .= "STATUS:CONFIRMED\r\n";
         $event .= "TRANSP:TRANSPARENT\r\n";
@@ -623,11 +615,52 @@ class CalendarTagScheduler
 
 $scheduler = new CalendarTagScheduler($tagsData, $slots, $priorityToPeriod, $allowSameDayRepetition);
 
-$startDate = date('Y-m-01');
-$daysInMonth = date('t');
-$scheduler->generateSchedule($startDate, $daysInMonth);
+// Parse command-line arguments for date range
+if (isset($argv[1]) && ($argv[1] === '--help' || $argv[1] === '-h')) {
+    echo "Calendar Tag Scheduler - Usage:\n\n";
+    echo "  php scheduler.php [start_date] [days|end_date]\n\n";
+    echo "Examples:\n";
+    echo "  php scheduler.php                         - current month from day 1\n";
+    echo "  php scheduler.php today                   - from today to end of current month\n";
+    echo "  php scheduler.php 2026-01-22              - from Jan 22 to end of month\n";
+    echo "  php scheduler.php 2026-01-22 10           - from Jan 22 for 10 days\n";
+    echo "  php scheduler.php 2026-01-22 2026-02-15   - from Jan 22 to Feb 15\n\n";
+    exit(0);
+}
 
-echo "=== РАСПИСАНИЕ КАЛЕНДАРЯ (весь месяц) ===\n\n";
+$startDate = date('Y-m-01');
+$days = (int)date('t');
+
+if (isset($argv[1])) {
+    if ($argv[1] === 'today') {
+        $startDate = date('Y-m-d');
+        $days = (int)date('t') - (int)date('j') + 1; // remaining days in month
+    } else {
+        $startDate = $argv[1];
+
+        if (isset($argv[2])) {
+            // Check if second argument is a number (days) or a date (end date)
+            if (is_numeric($argv[2])) {
+                $days = (int)$argv[2];
+            } else {
+                // Calculate days between start and end date
+                $start = new DateTime($startDate);
+                $end = new DateTime($argv[2]);
+                $days = (int)$end->diff($start)->days + 1;
+            }
+        } else {
+            // Default: until end of month from start date
+            $start = new DateTime($startDate);
+            $days = (int)$start->format('t') - (int)$start->format('j') + 1;
+        }
+    }
+}
+
+$scheduler->generateSchedule($startDate, $days);
+
+$endDate = (new DateTime($startDate))->modify('+' . ($days - 1) . ' days')->format('Y-m-d');
+echo "=== РАСПИСАНИЕ КАЛЕНДАРЯ ===\n";
+echo "Период: $startDate — $endDate ($days дней)\n\n";
 echo $scheduler->getScheduleTableFormatted();
 
 echo "\n=== СВОДКА ПО ТЕГАМ ===\n\n";
@@ -638,6 +671,6 @@ echo $scheduler->printStatistics();
 $icsFile = $scheduler->generateICS('calendar_tags.ics');
 echo "\n\n=== ICS-ФАЙЛ СОЗДАН ===\n";
 echo "Файл: $icsFile\n";
-echo "Формат: События на весь день с правилами повторения (RRULE)\n";
-echo "Каждый тег появляется как отдельное повторяющееся событие.\n";
-echo "Вы можете импортировать его в Google Calendar, Outlook или другой календарь.\n";
+echo "Формат: Отдельные события на весь день для каждого вхождения тега\n";
+echo "Каждое вхождение тега в расписании - это отдельное событие.\n";
+echo "Вы можете импортировать его в Google Calendar, Outlook, Apple Calendar или другой календарь.\n";
