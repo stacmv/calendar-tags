@@ -2,7 +2,7 @@
 config/config.php
 
 # Generated files
-calendar_tags.ics
+calendar_tags*.ics
 
 # OS files
 .DS_Store

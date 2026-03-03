@@ -503,12 +503,10 @@ class CalendarTagScheduler
         $ics .= "X-WR-CALNAME:Теги информационного потребления\r\n";
         $ics .= "X-WR-TIMEZONE:Europe/Moscow\r\n";
 
-        $eventId = 1;
-
         foreach ($this->schedule as $dateStr => $daySchedule) {
             foreach ($daySchedule as $slotName => $tag) {
                 if ($tag !== null) {
-                    $ics .= $this->createSingleEvent($dateStr, $slotName, $tag, $eventId++);
+                    $ics .= $this->createSingleEvent($dateStr, $slotName, $tag);
                 }
             }
         }
@@ -525,16 +523,17 @@ class CalendarTagScheduler
      * @param string $dateStr Event date (YYYY-MM-DD)
      * @param string $slotName Time slot name
      * @param array $tag Tag data
-     * @param int $id Event ID
      * @return string ICS VEVENT block
      */
-    private function createSingleEvent($dateStr, $slotName, $tag, $id)
+    private function createSingleEvent($dateStr, $slotName, $tag)
     {
         $date = new DateTime($dateStr);
         $dateFormatted = $date->format('Ymd');
 
+        $uid = md5($dateStr . '|' . $slotName . '|' . $tag['code']) . '@scheduler';
+
         $event = "BEGIN:VEVENT\r\n";
-        $event .= "UID:tag-{$id}@scheduler\r\n";
+        $event .= "UID:{$uid}\r\n";
         $event .= "DTSTAMP:" . date('Ymd\\THis\\Z') . "\r\n";
         $event .= "DTSTART;VALUE=DATE:{$dateFormatted}\r\n";
         $event .= "SUMMARY:{$slotName}: {$tag['code']}\r\n";
@@ -607,6 +606,15 @@ class CalendarTagScheduler
         $output .= "Использовано в расписании: {$stats['used_tags']}\n";
         $output .= "Не использовано: {$stats['unused_tags']}\n";
 
+        if ($stats['unused_tags'] > 0) {
+            $output .= "\nНеиспользованные теги:\n";
+            foreach ($this->tags as $tag) {
+                if (!isset($this->tagFirstDates[$tag['code']])) {
+                    $output .= "  - {$tag['code']} (приоритет: {$tag['priority']}, период: {$tag['period']} дн.) — {$tag['name']}\n";
+                }
+            }
+        }
+
         return $output;
     }
 }
@@ -668,7 +676,7 @@ echo $scheduler->getTagSummaryFormatted();
 
 echo $scheduler->printStatistics();
 
-$icsFile = $scheduler->generateICS('calendar_tags.ics');
+$icsFile = $scheduler->generateICS("calendar_tags_{$startDate}_{$days}.ics");
 echo "\n\n=== ICS-ФАЙЛ СОЗДАН ===\n";
 echo "Файл: $icsFile\n";
 echo "Формат: Отдельные события на весь день для каждого вхождения тега\n";
