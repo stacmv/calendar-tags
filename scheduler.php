@@ -37,7 +37,6 @@ if (!file_exists($configFile)) {
 $config = require $configFile;
 
 $slots = $config['slots'];
-$priorityToPeriod = $config['priorityToPeriod'];
 $allowSameDayRepetition = $config['allowSameDayRepetition'];
 $tagsData = $config['tags'];
 
@@ -54,7 +53,6 @@ class CalendarTagScheduler
     private $tags = [];
     private $strlenFunc;
     private $slots = [];
-    public $priorityToPeriod = [];
     private $schedule = [];
     private $lastUsed = [];
     private $tagFirstDates = [];
@@ -64,16 +62,14 @@ class CalendarTagScheduler
     /**
      * Constructor
      *
-     * @param array $tagsData Array of tag definitions
+     * @param array $tagsData Array of tag definitions with 'code', 'name', 'period', and optional 'priority'
      * @param array $slots Time slots with allowed actions
-     * @param array $priorityToPeriod Priority to period mapping
      * @param bool $allowSameDayRepetition Allow tag repetition in one day
      */
-    public function __construct($tagsData, $slots, $priorityToPeriod, $allowSameDayRepetition = true)
+    public function __construct($tagsData, $slots, $allowSameDayRepetition = true)
     {
         $this->allowSameDayRepetition = $allowSameDayRepetition;
         $this->slots = $slots;
-        $this->priorityToPeriod = $priorityToPeriod;
 
         if (function_exists('mb_strwidth')) {
             $this->strlenFunc = 'mb_strwidth';
@@ -102,7 +98,11 @@ class CalendarTagScheduler
     }
 
     /**
-     * Initialize tags with codes and periods
+     * Initialize tags — derives 'action' from first segment of 'code'.
+     *
+     * Tag schema: ['code' => 'EDU-AI', 'name' => '...', 'period' => 3, 'priority' => 4]
+     * 'priority' is optional (defaults to 3) and used only as tiebreaker when
+     * multiple tags are eligible for the same slot on the same day.
      *
      * @param array $tagsData Raw tag data
      */
@@ -111,45 +111,13 @@ class CalendarTagScheduler
         $this->tags = [];
         $this->lastUsed = [];
         foreach ($tagsData as $tag) {
-            $tag['code'] = $this->generateCode($tag);
-            $tag['period'] = $this->priorityToPeriod[$tag['priority']];
+            $tag['action'] = explode('-', $tag['code'])[0];
+            if (!isset($tag['priority'])) {
+                $tag['priority'] = 3;
+            }
             $this->tags[] = $tag;
             $this->lastUsed[$tag['code']] = null;
         }
-    }
-
-    /**
-     * Update priority to period mapping
-     *
-     * @param array $mapping New priority mapping
-     * @param array|null $tagsData Optional tag data to reinitialize
-     */
-    public function setPriorityToPeriod($mapping, $tagsData = null)
-    {
-        $this->priorityToPeriod = $mapping;
-        if ($tagsData !== null) {
-            $this->initializeTags($tagsData);
-        } else {
-            foreach ($this->tags as &$tag) {
-                $tag['period'] = $this->priorityToPeriod[$tag['priority']];
-            }
-        }
-    }
-
-    /**
-     * Generate tag code from components
-     *
-     * @param array $tag Tag with action, type, channel
-     * @return string Tag code (e.g., "EDU-TECH-YT")
-     */
-    private function generateCode($tag)
-    {
-        $parts = [
-            $tag['action'],
-            $tag['type'],
-            $tag['channel']
-        ];
-        return implode('-', array_filter($parts));
     }
 
     /**
@@ -617,11 +585,166 @@ class CalendarTagScheduler
 
         return $output;
     }
+
+    /**
+     * Analyse slot capacity vs tag demand.
+     *
+     * For each slot, calculates how many appearances all eligible tags want
+     * over the given period. Tags shared across multiple slots distribute their
+     * demand proportionally (demand per slot = days/period/numSlotsWithThatAction).
+     *
+     * @param int $days Schedule period in days
+     * @return array Per-slot analysis: demand, supply, ratio, per-action breakdown
+     */
+    public function analyzeCapacity(int $days): array
+    {
+        // How many slots allow each action type
+        $slotsPerAction = [];
+        foreach ($this->slots as $slotName => $actions) {
+            foreach ($actions as $action) {
+                $slotsPerAction[$action][] = $slotName;
+            }
+        }
+
+        $result = [];
+        foreach ($this->slots as $slotName => $actions) {
+            $slotDemand = 0.0;
+            $actionBreakdown = [];
+
+            foreach ($actions as $action) {
+                $numSlots = count($slotsPerAction[$action] ?? [1]);
+                $actionDemand = 0.0;
+                $contributors = [];
+
+                foreach ($this->tags as $tag) {
+                    if ($tag['action'] !== $action) continue;
+                    $contribution = (float)$days / $tag['period'] / $numSlots;
+                    $actionDemand += $contribution;
+                    $contributors[] = [
+                        'code'         => $tag['code'],
+                        'period'       => $tag['period'],
+                        'contribution' => $contribution,
+                    ];
+                }
+
+                usort($contributors, fn($a, $b) => $b['contribution'] <=> $a['contribution']);
+
+                $actionBreakdown[$action] = [
+                    'demand'              => $actionDemand,
+                    'tag_count'           => count($contributors),
+                    'num_eligible_slots'  => $numSlots,
+                    'contributors'        => $contributors,
+                ];
+                $slotDemand += $actionDemand;
+            }
+
+            $result[$slotName] = [
+                'demand'  => $slotDemand,
+                'supply'  => $days,
+                'ratio'   => $days > 0 ? $slotDemand / $days : 0.0,
+                'actions' => $actionBreakdown,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Print formatted slot capacity analysis with overload warnings.
+     *
+     * Status thresholds:
+     *   ✓           load ≤ 85 %  — healthy
+     *   ⚠ ВЫСОКАЯ  85–130 %     — tight, some tags may occasionally miss
+     *   ✗ ПЕРЕГРУЗКА > 130 %    — overloaded, tags will be permanently skipped
+     *
+     * @param int $days Schedule period in days
+     * @return string Formatted output
+     */
+    public function printCapacityAnalysis(int $days): string
+    {
+        $analysis = $this->analyzeCapacity($days);
+        $output = "\n=== АНАЛИЗ ЁМКОСТИ СЛОТОВ ===\n\n";
+
+        $headers = ['Слот', 'Действия', 'Тегов', 'Спрос', 'Слотов', 'Загрузка', 'Статус'];
+        $rows = [];
+
+        foreach ($analysis as $slotName => $data) {
+            $actions   = implode('+', array_keys($data['actions']));
+            $totalTags = array_sum(array_column($data['actions'], 'tag_count'));
+            $demand    = number_format($data['demand'], 1);
+            $pct       = round($data['ratio'] * 100) . '%';
+
+            if ($data['ratio'] > 1.3) {
+                $status = '✗ ПЕРЕГРУЗКА';
+            } elseif ($data['ratio'] > 0.85) {
+                $status = '⚠ ВЫСОКАЯ';
+            } else {
+                $status = '✓';
+            }
+
+            $rows[] = [$slotName, $actions, (string)$totalTags, $demand, (string)$days, $pct, $status];
+        }
+
+        $columnWidths = [];
+        foreach ($headers as $i => $h) {
+            $columnWidths[$i] = $this->getStringLength($h);
+        }
+        foreach ($rows as $row) {
+            foreach ($row as $i => $cell) {
+                $columnWidths[$i] = max($columnWidths[$i], $this->getStringLength($cell));
+            }
+        }
+
+        $sep = function(string $l, string $m, string $r) use ($columnWidths): string {
+            $s = $l;
+            foreach ($columnWidths as $i => $w) {
+                $s .= str_repeat('─', $w + 2) . ($i < count($columnWidths) - 1 ? $m : $r);
+            }
+            return $s . "\n";
+        };
+
+        $output .= $sep('┌', '┬', '┐');
+        $output .= '│';
+        foreach ($headers as $i => $h) {
+            $output .= ' ' . $h . str_repeat(' ', $columnWidths[$i] - $this->getStringLength($h)) . ' │';
+        }
+        $output .= "\n";
+        $output .= $sep('├', '┼', '┤');
+        foreach ($rows as $row) {
+            $output .= '│';
+            foreach ($row as $i => $cell) {
+                $output .= ' ' . $cell . str_repeat(' ', $columnWidths[$i] - $this->getStringLength($cell)) . ' │';
+            }
+            $output .= "\n";
+        }
+        $output .= $sep('└', '┴', '┘');
+
+        // Detailed breakdown for overloaded slots
+        $overloaded = array_filter($analysis, fn($d) => $d['ratio'] > 1.3);
+        if (!empty($overloaded)) {
+            $output .= "\nПодробности перегруженных слотов:\n";
+            foreach ($overloaded as $slotName => $data) {
+                foreach ($data['actions'] as $action => $info) {
+                    if ($info['tag_count'] === 0) continue;
+                    $demand = number_format($info['demand'], 1);
+                    $output .= "\n  {$slotName} / {$action}  ({$info['tag_count']} тегов, спрос {$demand} из {$days}):\n";
+                    foreach ($info['contributors'] as $c) {
+                        $output .= sprintf("    %-24s  period=%-3d  вклад=%.1f\n",
+                            $c['code'], $c['period'], $c['contribution']);
+                    }
+                }
+            }
+            $output .= "\n  Совет: увеличьте 'period' у тегов с высоким вкладом.\n";
+            $output .= "  Цель: sum(1/period) для всех тегов слота ≤ 1.0\n";
+        }
+
+        return $output;
+    }
 }
 
 // ==================== USAGE ====================
 
-$scheduler = new CalendarTagScheduler($tagsData, $slots, $priorityToPeriod, $allowSameDayRepetition);
+$scheduler = new CalendarTagScheduler($tagsData, $slots, $allowSameDayRepetition);
 
 // Parse command-line arguments for date range
 if (isset($argv[1]) && ($argv[1] === '--help' || $argv[1] === '-h')) {
@@ -675,6 +798,7 @@ echo "\n=== СВОДКА ПО ТЕГАМ ===\n\n";
 echo $scheduler->getTagSummaryFormatted();
 
 echo $scheduler->printStatistics();
+echo $scheduler->printCapacityAnalysis($days);
 
 $icsFile = $scheduler->generateICS("calendar_tags_{$startDate}_{$days}.ics");
 echo "\n\n=== ICS-ФАЙЛ СОЗДАН ===\n";

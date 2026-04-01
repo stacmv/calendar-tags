@@ -5,54 +5,49 @@
  * SETUP INSTRUCTIONS:
  * 1. Copy this file to config/config.php
  * 2. Customize the settings below
- * 3. The config.php file is in .gitignore and won't be committed
+ * 3. config.php is in .gitignore and will not be committed
+ *
+ * Tag schema:
+ *   'code'     — short calendar display code; first segment (before first '-') is the action
+ *                and must match one of the actions listed in 'slots' below.
+ *   'name'     — full description shown in statistics and ICS event body
+ *   'period'   — minimum days between appearances (e.g. 3 = at most once every 3 days)
+ *   'priority' — optional tiebreaker (1–5, default 3) used when multiple tags are eligible
+ *                for the same slot on the same day. Does NOT affect frequency.
+ *
+ * Capacity rule: for each slot, sum(1/period) across all eligible tags should stay ≤ 1.0
+ * Run the scheduler and check "АНАЛИЗ ЁМКОСТИ СЛОТОВ" to detect overloaded slots.
  */
 
 return [
     /**
-     * Time slots and their allowed actions
-     * Actions: EDU (Study), R (Read), A (Listen/Audio), V (View/Watch)
+     * Time slots and their allowed action prefixes.
+     * The action prefix is the first segment of a tag's 'code' (e.g. 'EDU', 'A', 'V').
      */
     'slots' => [
-        'Утро' => ['EDU', 'R'],
-        'Завтрак' => ['V', 'A'],
-        'Дорога' => ['V', 'A'],
+        'Утро'     => ['EDU', 'R'],
+        'Завтрак'  => ['V', 'A'],
+        'Дорога'   => ['V', 'A'],
         'Прогулка' => ['A'],
-        'Ужин' => ['V', 'A'],
-        'Вечер' => ['V', 'R', 'A']
+        'Ужин'     => ['V', 'A'],
+        'Вечер'    => ['V', 'R', 'A'],
     ],
 
     /**
-     * Priority to period mapping (days between repetitions)
-     * Priority 5 = most important, Priority 1 = least important
-     */
-    'priorityToPeriod' => [
-        5 => 2,  // Every 2 days
-        4 => 3,  // Every 3 days
-        3 => 4,  // Every 4 days
-        2 => 5,  // Every 5 days
-        1 => 6,  // Every 6 days
-    ],
-
-    /**
-     * Allow same tag to appear multiple times in one day
-     * Set to false if you want each tag to appear only once per day
+     * Allow the same tag to appear in more than one slot on a single day.
      */
     'allowSameDayRepetition' => true,
 
     /**
-     * Tags data
-     * Each tag has: name, action, type, channel, priority (1-5)
-     *
-     * Add your own tags below:
+     * Tags. Add, remove, or tune 'period' to balance slot capacity.
+     * Tip: start with few tags per slot, then add more while watching capacity %.
      */
     'tags' => [
-        // Example tags - customize for your needs
-        ["name" => "Technical video course", "action" => "EDU", "type" => "TECH", "channel" => "YT", "priority" => 5],
-        ["name" => "Podcasts", "action" => "A", "type" => "POD", "channel" => "PODCASTS", "priority" => 5],
-        ["name" => "News (audio)", "action" => "A", "type" => "NEWS", "channel" => "YT", "priority" => 4],
-        ["name" => "Technical book", "action" => "R", "type" => "TECH", "channel" => "BOOK", "priority" => 4],
-        ["name" => "Fiction book", "action" => "R", "type" => "FIC", "channel" => "BOOK", "priority" => 3],
-        ["name" => "Watch Later videos", "action" => "V", "type" => "RL", "channel" => "YT", "priority" => 2],
+        ['code' => 'EDU-TECH-YT', 'name' => 'Technical video course', 'period' => 2, 'priority' => 5],
+        ['code' => 'A-PODCASTS',  'name' => 'Podcasts',               'period' => 2, 'priority' => 5],
+        ['code' => 'A-NEWS-YT',   'name' => 'News (audio)',           'period' => 3, 'priority' => 4],
+        ['code' => 'R-TECH-BOOK', 'name' => 'Technical book',         'period' => 3, 'priority' => 4],
+        ['code' => 'R-FIC-BOOK',  'name' => 'Fiction book',           'period' => 4, 'priority' => 3],
+        ['code' => 'V-YT-RL',     'name' => 'Watch Later videos',     'period' => 5, 'priority' => 2],
     ],
 ];
